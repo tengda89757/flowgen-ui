@@ -1,0 +1,66 @@
+{% macro get_imports(nodes) %}
+    {%- set import_lines = [] -%}
+    {%- do import_lines.append('from autogen import AssistantAgent') -%}
+    {%- set import_dict = {
+        'UserProxyAgent': 'from autogen import UserProxyAgent',
+        'AssistantAgent': 'from autogen import AssistantAgent',
+        'CompressibleAgent': 'from autogen.agentchat.contrib.compressible_agent import CompressibleAgent',
+        'GroupChat': 'from autogen import GroupChat\nfrom autogen import GroupChatManager',
+        'GPTAssistantAgent': 'from autogen.agentchat.contrib.gpt_assistant_agent import GPTAssistantAgent',
+        'MultimodalConversableAgent': 'from autogen.agentchat.contrib.multimodal_conversable_agent import MultimodalConversableAgent',
+        'RetrieveAssistantAgent': 'from autogen.agentchat.contrib.retrieve_assistant_agent import RetrieveAssistantAgent\nimport chromadb',
+        'RetrieveUserProxyAgent': 'from autogen.agentchat.contrib.retrieve_user_proxy_agent import RetrieveUserProxyAgent',
+        'LLaVAAgent': 'from autogen.agentchat.contrib.llava_agent import LLaVAAgent',
+        'MathUserProxyAgent': 'from autogen.agentchat.contrib.math_user_proxy_agent import MathUserProxyAgent',
+        'DALLEAgent': 'from app.extensions.dalle_agent import DALLEAgent',
+    } -%}
+    {%- for node in nodes -%}
+        {% set cls = node['data'].get('class') %}
+        {%- if cls and cls in import_dict and import_dict[cls] not in import_lines -%}
+            {% do import_lines.append(import_dict[cls]) %}
+        {%- endif -%}
+    {%- endfor %}
+
+from dotenv import load_dotenv
+load_dotenv()  # This will load all environment variables from .env
+
+import argparse
+import os
+import time
+from termcolor import colored
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Start a chat with agents.')
+parser.add_argument('message', type=str, help='The message to send to agent.')
+args = parser.parse_args()
+
+import autogen
+
+# openai, whisper and moviepy are optional dependencies, currently only used in video transcript example
+# However, we beleive they are useful for other future examples, so we include them here as part of standard imports
+from openai import OpenAI
+import whisper
+from moviepy.editor import VideoFileClip
+
+from IPython import get_ipython
+
+try:
+  {%- for import_line in import_lines|unique %}
+  {{ import_line }}
+  {%- endfor %}
+except ImportError as e:
+  print(colored(f'Error: {e}', 'red'))
+  raise
+
+# Replace the default get_human_input function for status control
+def custom_get_human_input(self, prompt: str) -> str:
+    # Set wait_for_human_input to True
+    print('__STATUS_WAIT_FOR_HUMAN_INPUT__', prompt, flush=True)
+    reply = input(prompt)
+    # Restore the status to running
+    print('__STATUS_RECEIVED_HUMAN_INPUT__', prompt, flush=True)
+    return reply
+
+autogen.ConversableAgent.get_human_input = custom_get_human_input
+
+{% endmacro %}
